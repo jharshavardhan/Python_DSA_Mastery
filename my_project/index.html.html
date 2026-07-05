@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Foundations + Data Structures — 20-Hour Core</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>html,body{margin:0;padding:0;background:#0E1413}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef } = React;
+
+// ---------- Design tokens: "Graphite Mint" ----------
+const C = {
+  bg: "#0E1413", panel: "#17201E", panel2: "#111A18", line: "#283835",
+  text: "#C9D9D4", dim: "#7E968E", white: "#F2FAF7",
+  mint: "#57E6B8", blue: "#5BA8F5", orange: "#F5A05A", green: "#6FE39A", red: "#F2705F", yellow: "#F0CB5E", purple: "#B79AF2",
+};
+const mono = "'Cascadia Code', 'Cascadia Mono', Consolas, 'Courier New', monospace";
+const sans = "'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif";
+
+// ---------- Building blocks ----------
+const Kbd = ({ children }) => (
+  <code style={{ fontFamily: mono, background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 6, padding: "1px 7px", color: C.mint, fontSize: 13 }}>{children}</code>
+);
+
+const Code = ({ code, title, note }) => {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    const ta = document.createElement("textarea");
+    ta.value = code; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); } catch (e) {}
+    document.body.removeChild(ta);
+    setCopied(true); setTimeout(() => setCopied(false), 1400);
+  };
+  return (
+    <div style={{ margin: "10px 0" }}>
+      <div style={{ background: "#0A0F0E", border: `1px solid ${C.line}`, borderRadius: 8, overflow: "hidden" }}>
+        <div onClick={copy} style={{ display: "flex", justifyContent: "space-between", padding: "6px 14px", borderBottom: `1px solid ${C.line}`, cursor: "pointer" }}>
+          <span style={{ fontFamily: mono, fontSize: 11.5, color: C.yellow }}>{title || "python — try it in the REPL"}</span>
+          <span style={{ fontFamily: mono, fontSize: 11, color: copied ? C.green : C.dim }}>{copied ? "copied ✓" : "copy"}</span>
+        </div>
+        <pre style={{ fontFamily: mono, fontSize: 12.5, color: C.text, margin: 0, padding: "11px 14px", overflowX: "auto", lineHeight: 1.6 }}>{code}</pre>
+      </div>
+      {note && <div style={{ fontSize: 12.5, color: C.dim, marginTop: 4, paddingLeft: 4, lineHeight: 1.5 }}>{note}</div>}
+    </div>
+  );
+};
+
+const CH = ({ children }) => <h3 style={{ fontFamily: sans, fontWeight: 700, fontSize: 16.5, color: C.white, margin: "20px 0 4px" }}>{children}</h3>;
+const P = ({ children, style }) => <p style={{ fontSize: 14, lineHeight: 1.65, color: C.text, margin: "8px 0", ...style }}>{children}</p>;
+const Tip = ({ children, color = C.yellow, icon = "💡" }) => (
+  <div style={{ borderLeft: `3px solid ${color}`, background: `${color}0A`, borderRadius: "0 8px 8px 0", padding: "9px 13px", margin: "10px 0", fontSize: 13.5, lineHeight: 1.6, color: C.text }}>{icon} {children}</div>
+);
+
+// ---------- Quiz ----------
+function Quiz({ questions }) {
+  const [answers, setAnswers] = useState({});
+  const score = questions.filter((q, i) => answers[i] === q.c).length;
+  const all = Object.keys(answers).length === questions.length;
+  return (
+    <div>
+      {questions.map((q, i) => (
+        <div key={i} style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14, marginBottom: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: C.white, marginBottom: 8, lineHeight: 1.5, fontFamily: q.mono ? mono : sans }}>{i + 1}. {q.q}</div>
+          {q.a.map((opt, j) => {
+            const picked = answers[i] === j, show = answers[i] !== undefined, right = j === q.c;
+            let border = C.line, bg = "transparent", col = C.text;
+            if (show && picked && right) { border = C.green; bg = `${C.green}14`; col = C.green; }
+            else if (show && picked) { border = C.red; bg = `${C.red}14`; col = C.red; }
+            else if (show && right) { border = `${C.green}66`; col = C.green; }
+            return <div key={j} onClick={() => answers[i] === undefined && setAnswers({ ...answers, [i]: j })} style={{ border: `1px solid ${border}`, background: bg, color: col, borderRadius: 8, padding: "7px 12px", marginBottom: 6, fontSize: 13.5, cursor: answers[i] === undefined ? "pointer" : "default", lineHeight: 1.5, fontFamily: mono }}>{opt}</div>;
+          })}
+          {answers[i] !== undefined && q.why && <div style={{ fontSize: 12.5, color: C.dim, marginTop: 6, lineHeight: 1.55 }}>→ {q.why}</div>}
+        </div>
+      ))}
+      {all && (
+        <div style={{ textAlign: "center", padding: 11, border: `1.5px solid ${C.green}66`, borderRadius: 12, background: `${C.green}0D`, fontFamily: mono, fontSize: 13.5, color: C.green }}>
+          recap check: {score}/{questions.length} ✓
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------- Practice question card (attempt → hint → solution) ----------
+function Question({ p, grade, setGrade }) {
+  const [stage, setStage] = useState(0);
+  const diffColor = { Warmup: C.blue, Classic: C.mint, Famous: C.yellow, Challenge: C.orange }[p.diff] || C.blue;
+  const grades = [
+    { k: "solo", label: "✅ solved myself", color: C.green },
+    { k: "hint", label: "🟡 needed hint", color: C.yellow },
+    { k: "read", label: "🔴 read solution", color: C.red },
+  ];
+  return (
+    <div style={{ background: C.panel2, border: `1px solid ${grade ? (grades.find(g => g.k === grade).color + "66") : C.line}`, borderRadius: 14, padding: 16, margin: "12px 0" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+        <span style={{ fontFamily: sans, fontSize: 15.5, fontWeight: 700, color: C.white }}>{p.title}</span>
+        <span style={{ fontFamily: mono, fontSize: 10.5, color: diffColor, border: `1px solid ${diffColor}55`, borderRadius: 999, padding: "2px 9px" }}>{p.diff}</span>
+        {p.src && <span style={{ fontFamily: mono, fontSize: 11, color: C.dim }}>{p.src}</span>}
+      </div>
+      <p style={{ fontSize: 13.5, lineHeight: 1.6, color: C.text, margin: "4px 0" }}>{p.statement}</p>
+      {p.example && <pre style={{ fontFamily: mono, fontSize: 12, color: C.dim, background: "#0A0F0E", border: `1px solid ${C.line}`, borderRadius: 8, padding: "8px 12px", margin: "8px 0", overflowX: "auto", lineHeight: 1.6 }}>{p.example}</pre>}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0 2px" }}>
+        {stage < 1 && <button onClick={() => setStage(1)} style={{ fontFamily: mono, fontSize: 11.5, fontWeight: 700, padding: "7px 13px", borderRadius: 8, cursor: "pointer", border: `1px solid ${C.yellow}66`, background: `${C.yellow}12`, color: C.yellow }}>🔓 hint</button>}
+        {stage >= 1 && stage < 2 && <button onClick={() => setStage(2)} style={{ fontFamily: mono, fontSize: 11.5, fontWeight: 700, padding: "7px 13px", borderRadius: 8, cursor: "pointer", border: `1px solid ${C.mint}66`, background: `${C.mint}12`, color: C.mint }}>📖 solution</button>}
+        {stage === 0 && <span style={{ fontFamily: mono, fontSize: 10.5, color: C.dim, alignSelf: "center" }}>write it in the REPL first</span>}
+      </div>
+      {stage >= 1 && <div style={{ animation: "rise .3s both", borderLeft: `3px solid ${C.yellow}`, background: `${C.yellow}08`, borderRadius: "0 8px 8px 0", padding: "8px 12px", margin: "8px 0", fontSize: 13, color: C.text, lineHeight: 1.6 }}>💛 {p.hint}</div>}
+      {stage >= 2 && <div style={{ animation: "rise .3s both" }}><Code title={p.complexity ? `solution — ${p.complexity}` : "solution"} code={p.code} note={p.note} /></div>}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8, alignItems: "center" }}>
+        <span style={{ fontFamily: mono, fontSize: 10.5, color: C.dim }}>self-grade:</span>
+        {grades.map(g => (
+          <button key={g.k} onClick={() => setGrade(g.k)} style={{ fontFamily: mono, fontSize: 10.5, padding: "4px 9px", borderRadius: 999, cursor: "pointer", border: `1px solid ${grade === g.k ? g.color : C.line}`, background: grade === g.k ? `${g.color}18` : "transparent", color: grade === g.k ? g.color : C.dim }}>{g.label}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------- Recap box ----------
+const Recap = ({ items }) => (
+  <div style={{ background: `${C.mint}08`, border: `1.5px solid ${C.mint}44`, borderRadius: 14, padding: "14px 17px", margin: "18px 0 10px" }}>
+    <div style={{ fontFamily: mono, fontSize: 11.5, letterSpacing: "0.14em", color: C.mint, marginBottom: 8 }}>📌 RECAP — IF YOU REMEMBER NOTHING ELSE</div>
+    {items.map((it, i) => (
+      <div key={i} style={{ display: "flex", gap: 10, padding: "4px 0", fontSize: 13.5, lineHeight: 1.6, color: C.text }}>
+        <span style={{ color: C.mint, flexShrink: 0 }}>{i + 1}.</span><span>{it}</span>
+      </div>
+    ))}
+  </div>
+);
+
+// ---------- SESSIONS (16 × ~75 min = 20 hrs) ----------
+function buildSessions() {
+  return [
+    // ========== 1 ==========
+    {
+      title: "Start here: variables, types & I/O", icon: "🚀", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Setup (5 min, once)</CH>
+          <Code title="PowerShell" code={"winget install -e --id Python.Python.3.12\npython        # opens the REPL — where you'll live for this course"} note="Type code, press Enter, see the result instantly. Exit with exit(). Every session runs here or in a scratch .py file." />
+          <CH>Variables — names stuck onto values</CH>
+          <Code code={'age = 25            # int\nprice = 19.99        # float\nname = "Ada"         # str\nis_open = True       # bool\ntype(price)          # <class \'float\'> — ask anything its type'} note="No declarations, no type keywords. A variable is created the moment you assign to it, and can be reassigned to anything." />
+          <CH>Operators & conversion</CH>
+          <Code code={"7 / 2      # 3.5   true division — always float\n7 // 2     # 3     floor division\n7 % 2      # 1     remainder (modulo) — even/odd checks, wrap-around\n2 ** 10    # 1024  power\nint(\"42\") + 1      # 43 — str to int\nstr(42) + \"!\"       # '42!' — int to str; mixing them raises TypeError"} note="% and // will follow you through every data-structures problem — learn them now." />
+          <CH>Input & output</CH>
+          <Code code={'name = input("Your name: ")     # ALWAYS returns a string\nage = int(input("Age: "))        # convert immediately if you need a number\nprint(f"Hi {name}, next year you\'ll be {age + 1}")'} note="f-strings — f'text {expr}' — are the modern way to build output; expressions run right inside the braces." />
+        </>
+      ),
+      problems: [
+        { title: "Swap without a temp variable", diff: "Classic", statement: "a = 5, b = 9. Swap their values in ONE line, no third variable.", hint: "Python assigns right side to left side simultaneously — what if both sides had two names?", code: "a, b = 5, 9\na, b = b, a\nprint(a, b)    # 9 5", note: "Tuple unpacking — an idiom you'll use constantly, including inside algorithms later.", grade: true },
+        { title: "Temperature converter", diff: "Warmup", statement: "Read a Celsius value with input() and print it in Fahrenheit (F = C × 9/5 + 32), nicely formatted to 1 decimal place.", hint: "input() gives a string → float() it. f-strings format decimals with {value:.1f}.", code: 'c = float(input("Celsius: "))\nf = c * 9 / 5 + 32\nprint(f"{c}°C = {f:.1f}°F")', note: "{f:.1f} = format to 1 decimal. The convert-compute-format pipeline is 90% of beginner scripts." },
+        { title: "Digital clock math", diff: "Warmup", statement: "Given total_seconds = 7385, print it as h:m:s (2:03:05 → 2 h, 3 m, 5 s) using only // and %.", hint: "hours = seconds // 3600. What's LEFT after removing the hours? That's % 3600.", code: "total = 7385\nh = total // 3600\nm = (total % 3600) // 60\ns = total % 60\nprint(f\"{h}h {m}m {s}s\")   # 2h 3m 5s", note: "The divide-and-remainder pattern: peel off the biggest unit with //, keep the rest with %." },
+      ],
+      recap: [
+        "Variables are created by assignment; type() tells you what anything is.",
+        "/ gives float, // floors, % gives remainder, ** is power — // and % are algorithm workhorses.",
+        "input() ALWAYS returns str — convert with int()/float() immediately.",
+        "f-strings: f\"text {expression}\" — with {x:.2f} for decimal formatting.",
+        "a, b = b, a — simultaneous assignment; no temp variable ever needed.",
+      ],
+      quiz: [
+        { q: "print(10 / 5) shows…", a: ["2", "2.0 — / always returns a float", "error"], c: 1 },
+        { q: "input('n: ') + 1 crashes because…", a: ["input failed", "input() returned a str, and str + int is a TypeError", "1 must be quoted"], c: 1 },
+      ],
+    },
+    // ========== 2 ==========
+    {
+      title: "Strings", icon: "🔤", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Indexing & slicing — the grammar of sequences</CH>
+          <Code code={'s = "python"\ns[0]       # \'p\'   first\ns[-1]      # \'n\'   last (negatives count from the end)\ns[1:4]     # \'yth\' — start included, stop EXCLUDED\ns[:3]      # \'pyt\'  from the beginning\ns[::2]     # \'pto\'  every 2nd char\ns[::-1]    # \'nohtyp\' — reversed'} note="Memorize s[start:stop:step]. The exact same syntax runs lists, tuples, and more — learn it once here." />
+          <CH>The methods you'll actually use</CH>
+          <Code code={'s = "  Hello World  "\ns.strip()            # \'Hello World\' — trim whitespace\ns.lower(), s.upper()\ns.replace("l", "L")\n"World" in s          # True — substring check\ns.strip().split(" ")  # [\'Hello\', \'World\']\n"-".join(["a","b","c"])  # \'a-b-c\'\n"abc".isalpha(), "42".isdigit()'} note="split breaks a string into a list; join glues a list into a string. They're inverses — you'll use both weekly forever." />
+          <CH>Immutability — the one rule</CH>
+          <Code code={'s = "cat"\n# s[0] = "b"        # TypeError! strings can NEVER change in place\ns = "b" + s[1:]      # make a NEW string instead: \'bat\''} note="Every string method returns a NEW string. Building a big string in a loop with +=? Collect pieces in a list, then ''.join(pieces) once." />
+        </>
+      ),
+      problems: [
+        { title: "Count the vowels", diff: "Classic", statement: "Write count_vowels(s) → how many of a e i o u appear in s (any case). count_vowels('Beautiful') → 5.", hint: "Loop over the string (for ch in s), lowercase each char, check membership: ch in 'aeiou'.", code: 'def count_vowels(s):\n    count = 0\n    for ch in s.lower():\n        if ch in "aeiou":\n            count += 1\n    return count\n\nprint(count_vowels("Beautiful"))   # 5', note: "for ch in s walks a string character by character — strings are sequences like everything else." },
+        { title: "Valid Palindrome", diff: "Famous", src: "LeetCode #125 (simplified)", statement: "Return True if a string reads the same forwards and backwards, ignoring case and spaces. 'Never odd or even' → True.", hint: "Clean it first (lowercase, remove spaces), then compare against one slicing trick from above.", code: 'def is_palindrome(s):\n    cleaned = s.lower().replace(" ", "")\n    return cleaned == cleaned[::-1]\n\nprint(is_palindrome("Never odd or even"))   # True', note: "Clean-then-check: normalize the input first and the actual logic collapses to one line." },
+        { title: "Initials extractor", diff: "Warmup", statement: "Turn 'ada  grace lovelace' into 'A.G.L.' — handle extra spaces and any capitalization.", hint: "split() with NO argument eats repeated spaces for free. Grab word[0] from each piece.", code: 'def initials(name):\n    parts = name.split()          # no-arg split handles messy spacing\n    letters = [w[0].upper() for w in parts]\n    return ".".join(letters) + "."\n\nprint(initials("ada  grace lovelace"))   # A.G.L.', note: "split() → transform each piece → join back: the universal string-processing pipeline." },
+      ],
+      recap: [
+        "s[start:stop:step] — stop excluded, negatives from the end, [::-1] reverses.",
+        "Strings are IMMUTABLE: every method returns a new string; s[0] = 'x' is illegal.",
+        "split() breaks into a list (no-arg version handles messy whitespace); join() glues back.",
+        "'sub' in s for substring checks; strip/lower/replace cover most cleaning.",
+        "Pipeline habit: normalize → transform pieces → reassemble.",
+      ],
+      quiz: [
+        { q: "\"hello\"[1:3] is…", a: ["'ell'", "'el' — index 3 is excluded", "'hel'"], c: 1 },
+        { q: "s.upper() changes s itself?", a: ["yes", "no — strings are immutable; it returns a NEW string you must assign", "only for ASCII"], c: 1 },
+      ],
+    },
+    // ========== 3 ==========
+    {
+      title: "Conditionals & truthiness", icon: "🔀", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>if / elif / else — indentation IS the syntax</CH>
+          <Code code={'score = 87\nif score >= 90:\n    grade = "A"\nelif score >= 80:      # checked only if the first was False\n    grade = "B"\nelse:\n    grade = "C"\nprint(grade)            # B'} note="4 spaces of indentation define the block — no braces. elif chains stop at the FIRST true branch." />
+          <CH>Combining conditions</CH>
+          <Code code={"age, has_id = 20, True\nage >= 18 and has_id     # both must hold\nage < 13 or age > 65      # either\nnot has_id                # flip\n13 <= age <= 19           # chained comparison — Python exclusive!"} note="and/or/not are spelled as words. Chained comparisons (a < b < c) read like math and work like it." />
+          <CH>Truthiness — what counts as False</CH>
+          <Code code={'# Falsy: 0, 0.0, "", [], {}, set(), None, False — everything else is truthy\nitems = []\nif not items:\n    print("empty!")\n\nname = ""\ngreeting = name or "stranger"    # or returns the first truthy operand\nprint(greeting)                   # stranger'} note="'if items:' is the idiomatic non-empty check. 'x or default' is the classic fallback pattern." />
+          <CH>One-line form</CH>
+          <Code code={'label = "even" if n % 2 == 0 else "odd"'} note="The conditional expression — value-picker, not statement. Use it when it fits on one readable line." />
+        </>
+      ),
+      problems: [
+        { title: "FizzBuzz", diff: "Famous", src: "the most famous screening question ever", statement: "For numbers 1–15: print 'FizzBuzz' if divisible by both 3 and 5, 'Fizz' if by 3, 'Buzz' if by 5, else the number.", hint: "Order matters! Check the 'both' case FIRST — or 15 gets caught by the 3-check before you reach it.", code: 'for n in range(1, 16):\n    if n % 15 == 0:\n        print("FizzBuzz")\n    elif n % 3 == 0:\n        print("Fizz")\n    elif n % 5 == 0:\n        print("Buzz")\n    else:\n        print(n)', note: "The lesson isn't loops — it's branch ORDER: most-specific condition first, because elif stops at the first hit." },
+        { title: "Leap year", diff: "Classic", statement: "A year is a leap year if divisible by 4 — EXCEPT century years, which must be divisible by 400. 2024 ✓, 1900 ✗, 2000 ✓.", hint: "Translate the rule literally: (div by 4 AND not div by 100) OR (div by 400).", code: "def is_leap(y):\n    return (y % 4 == 0 and y % 100 != 0) or y % 400 == 0\n\nprint(is_leap(2024), is_leap(1900), is_leap(2000))  # True False True", note: "Returning a boolean expression directly — no 'if cond: return True else: return False' padding, ever." },
+        { title: "Max of three (no max())", diff: "Warmup", statement: "Write biggest(a, b, c) using only if/elif logic.", hint: "Start by assuming a wins; let b and c challenge the champion.", code: "def biggest(a, b, c):\n    best = a\n    if b > best:\n        best = b\n    if c > best:\n        best = c\n    return best", note: "The 'running champion' shape — the same pattern will find max/min in ANY collection in session 4." },
+      ],
+      recap: [
+        "Indentation defines blocks; elif chains stop at the first True — order from most to least specific.",
+        "and / or / not as words; chained a < b < c works like math.",
+        "Falsy: 0, empty containers, '', None, False. 'if items:' = non-empty check.",
+        "'x or default' returns the first truthy value — the fallback idiom.",
+        "Return boolean expressions directly; 'val_if if cond else val_else' for one-line picks.",
+      ],
+      quiz: [
+        { q: "if []: print('yes') prints…", a: ["yes", "nothing — an empty list is falsy", "error"], c: 1 },
+        { q: "In FizzBuzz, checking n % 3 before n % 15…", a: ["is fine", "breaks it — 15 matches the 3-branch first and 'FizzBuzz' never prints", "is faster"], c: 1 },
+      ],
+    },
+    // ========== 4 ==========
+    {
+      title: "Loops", icon: "🔁", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>for — iterate over anything</CH>
+          <Code code={'for ch in "abc":          # strings\n    print(ch)\nfor n in [10, 20, 30]:     # lists\n    print(n)\nfor i in range(5):         # 0 1 2 3 4  (stop excluded, like slices)\n    print(i)\nrange(2, 10, 2)             # 2 4 6 8 — start, stop, step'} note="Python's for is 'for each'. You almost never manage an index by hand." />
+          <CH>enumerate & the accumulator pattern</CH>
+          <Code code={'total = 0\nfor price in [4, 9, 2]:\n    total += price          # accumulator: start empty, add each pass\n\nfor i, ch in enumerate("abc"):   # need the index too? enumerate.\n    print(i, ch)                  # 0 a · 1 b · 2 c'} note="Accumulators (sum, count, best-so-far) are half of all beginner loop problems. enumerate replaces range(len(x)) forever." />
+          <CH>while, break, continue</CH>
+          <Code code={'n = 1\nwhile n < 100:          # loop while a condition holds\n    n *= 2\nprint(n)                 # 128\n\nwhile True:              # loop-until pattern\n    cmd = input("> ")\n    if cmd == "quit":\n        break             # exit the loop entirely\n    if cmd == "":\n        continue          # skip to the next iteration'} note="for = known collection/count; while = unknown, condition-driven. while True + break is the standard input-loop shape." />
+        </>
+      ),
+      problems: [
+        { title: "Sum of digits", diff: "Classic", statement: "digit_sum(4729) → 22. Use // and % from session 1 — no string conversion.", hint: "n % 10 hands you the last digit. n // 10 removes it. Repeat while n > 0.", code: "def digit_sum(n):\n    total = 0\n    while n > 0:\n        total += n % 10     # grab last digit\n        n //= 10             # chop it off\n    return total\n\nprint(digit_sum(4729))   # 22", note: "The peel-digits-with-%-and-// loop appears in dozens of number problems (reverse integer, palindromic numbers…)." },
+        { title: "Fibonacci, first n terms", diff: "Famous", statement: "Print the first n Fibonacci numbers: 0 1 1 2 3 5 8 … (each = sum of previous two).", hint: "Keep just TWO variables and slide them forward with the tuple swap from session 1.", code: "def fib(n):\n    a, b = 0, 1\n    for _ in range(n):\n        print(a, end=\" \")\n        a, b = b, a + b\n\nfib(8)   # 0 1 1 2 3 5 8 13", note: "_ is the convention for a loop variable you don't use. This rolling-pair shape returns as the core of dynamic programming in session 16." },
+        { title: "Guessing game", diff: "Warmup", statement: "Pick secret = 7. Ask the user for guesses in a loop, print 'higher'/'lower', stop with 'got it in N tries!'.", hint: "while True + break when correct. Count attempts with an accumulator.", code: 'secret, tries = 7, 0\nwhile True:\n    guess = int(input("guess: "))\n    tries += 1\n    if guess == secret:\n        print(f"got it in {tries} tries!")\n        break\n    print("higher" if guess < secret else "lower")', note: "Every interactive CLI program is this loop. Note the one-line conditional doing the hint." },
+      ],
+      recap: [
+        "for iterates ANY sequence; range(start, stop, step) excludes stop, just like slices.",
+        "Accumulator pattern: initialize before the loop (0, [], best-so-far), update every pass.",
+        "enumerate(seq) gives index + value — never write range(len(seq)) again.",
+        "while = condition-driven; while True + break = the standard 'loop until' shape.",
+        "% 10 and //= 10 peel a number digit by digit — a recurring number-problem trick.",
+      ],
+      quiz: [
+        { q: "range(3) produces…", a: ["1, 2, 3", "0, 1, 2 — stop is excluded", "0, 1, 2, 3"], c: 1 },
+        { q: "'continue' does what?", a: ["exits the loop", "skips the rest of THIS iteration and jumps to the next one", "restarts the program"], c: 1 },
+      ],
+    },
+    // ========== 5 ==========
+    {
+      title: "Lists — your workhorse", icon: "📋", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Create, read, modify</CH>
+          <Code code={'nums = [3, 1, 4]\nnums[0], nums[-1]        # 3, 4 — index like strings\nnums[1:3]                 # [1, 4] — slicing works identically\nnums.append(9)            # add to END  → [3, 1, 4, 9]\nnums[0] = 99              # lists ARE mutable — unlike strings\nnums.pop()                # remove & return last → 9\nnums.remove(1)            # remove first matching VALUE\nlen(nums), 99 in nums     # size, membership'} note="Everything from strings (indexing, slicing, in, len) carries over — plus mutation." />
+          <CH>The built-ins that do your work</CH>
+          <Code code={"nums = [4, 1, 7, 2]\nsum(nums), max(nums), min(nums)\nsorted(nums)          # NEW sorted list — original untouched\nnums.sort()            # sorts IN PLACE, returns None\nnums.reverse()\nsorted(words, key=len) # sort by anything via key="} note="sorted() copies, .sort() mutates — mixing them up (x = x.sort() → None!) is a rite of passage. Skip it." />
+          <CH>The aliasing trap</CH>
+          <Code code={"a = [1, 2]\nb = a              # NOT a copy — a second name for the SAME list\nb.append(3)\nprint(a)            # [1, 2, 3] — a changed too!\nc = a.copy()        # an actual independent copy"} note="Assignment never copies in Python. Two names, one object — the #1 beginner shock. copy() (or a[:]) when you want independence." />
+        </>
+      ),
+      problems: [
+        { title: "Find the max (no max())", diff: "Classic", statement: "Return the largest element of a list using a loop — the session-3 'running champion', now over a collection.", hint: "Start the champion as the FIRST element (not 0 — the list may be all negatives), challenge with each other element.", code: "def my_max(nums):\n    best = nums[0]\n    for n in nums[1:]:\n        if n > best:\n            best = n\n    return best\n\nprint(my_max([-5, -2, -9]))   # -2", note: "Initializing with nums[0] instead of 0 is the difference between correct and subtly wrong. Interviews probe exactly this." },
+        { title: "Contains Duplicate", diff: "Famous", src: "LeetCode #217", statement: "Return True if any value appears twice in a list. First with a nested loop, then think: how would you make it faster? (Full answer arrives in session 7.)", hint: "Nested version: for each element, scan the elements AFTER it. It's O(n²) — remember that feeling.", code: "def contains_duplicate(nums):\n    for i in range(len(nums)):\n        for j in range(i + 1, len(nums)):\n            if nums[i] == nums[j]:\n                return True\n    return False", note: "This works — and it's slow (n² comparisons). Hold the discomfort: sessions 7 and 12 turn it into one line at O(n). Watching your own solution get obsoleted is the course working.", complexity: "O(n²) time" },
+        { title: "Reverse in place", diff: "Famous", src: "LeetCode #344", statement: "Reverse a list without slicing, without reversed(), without .reverse() — swap elements using two indexes.", hint: "One index at each end; tuple-swap; walk them toward each other until they meet.", code: "def reverse_in_place(nums):\n    left, right = 0, len(nums) - 1\n    while left < right:\n        nums[left], nums[right] = nums[right], nums[left]\n        left += 1\n        right -= 1", note: "Your first 'two pointers' algorithm — a data-structures technique hiding inside a basics session. It returns in session 12.", complexity: "O(n) time · O(1) space" },
+      ],
+      recap: [
+        "Lists = mutable sequences: index, slice, append, pop, remove, in, len.",
+        "sorted(x) returns new; x.sort() mutates and returns None — never x = x.sort().",
+        "b = a aliases (same object!); a.copy() or a[:] for a real copy.",
+        "Initialize running-best with the first ELEMENT, not 0.",
+        "You met two pointers and felt O(n²) pain — both get names in sessions 12+.",
+      ],
+      quiz: [
+        { q: "x = [3,1]; y = x.sort(); y is…", a: ["[1, 3]", "None — .sort() mutates in place and returns nothing", "[3, 1]"], c: 1 },
+        { q: "b = a; b.append(9) changes a because…", a: ["append is global", "b is another name for the same list object — assignment never copies", "lists auto-sync"], c: 1 },
+      ],
+    },
+    // ========== 6 ==========
+    {
+      title: "Tuples & sets", icon: "📦", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Tuples — frozen records</CH>
+          <Code code={'point = (3, 7)               # immutable list, basically\nx, y = point                  # unpacking\npoint[0]                      # index/slice like a list\n# point[0] = 9                # TypeError — no mutation, ever\nfor name, score in [("ada", 91), ("bob", 78)]:   # unpack in loops\n    print(name, score)'} note="Use a tuple when the positions MEAN something (x/y, name/score) and the record shouldn't change. Immutable → usable as dict keys later." />
+          <CH>Sets — uniqueness + instant membership</CH>
+          <Code code={'seen = {1, 2, 3}          # no duplicates, no order\nseen.add(2)                # already there → no effect\n2 in seen                  # True — and it\'s INSTANT: O(1)\nset("mississippi")         # {\'m\',\'i\',\'s\',\'p\'} — dedupe anything\nlen(set(nums)) != len(nums)   # duplicate check, one line!'} note="'in' on a list scans every element (O(n)); on a set it's a hash lookup (O(1)). Same syntax, different universe of speed." />
+          <CH>Set algebra</CH>
+          <Code code={'a, b = {1, 2, 3}, {2, 3, 4}\na & b     # {2, 3}     intersection — in both\na | b     # {1,2,3,4}  union — in either\na - b     # {1}        difference — in a only'} note="Common elements between two collections? Convert to sets, use &. Three characters replace a nested loop." />
+        </>
+      ),
+      problems: [
+        { title: "Contains Duplicate — the rematch", diff: "Famous", src: "LeetCode #217, round 2", statement: "Session 5's nested-loop version was O(n²). Solve it again in ONE line with a set.", hint: "If deduplicating shrinks the list, something was duplicated. Compare two lengths.", code: "def contains_duplicate(nums):\n    return len(set(nums)) != len(nums)", note: "From 10 lines of O(n²) to 1 line of O(n). This before/after IS the argument for learning data structures.", complexity: "O(n) time" },
+        { title: "Intersection of Two Arrays", diff: "Famous", src: "LeetCode #349", statement: "Return the unique common elements of two lists. [1,2,2,1] & [2,2] → [2].", hint: "The & operator was built for this sentence.", code: "def intersection(nums1, nums2):\n    return list(set(nums1) & set(nums2))\n\nprint(intersection([1,2,2,1], [2,2]))   # [2]", note: "set ops handle both dedup and matching simultaneously. list() converts back at the end.", complexity: "O(n + m)" },
+        { title: "Unpack the podium", diff: "Warmup", statement: "results = [('ada', 1), ('bob', 2), ('eve', 3)]. Loop over it printing 'ada wins gold' style lines, unpacking each tuple in the for statement itself.", hint: "for name, place in results: — the unpacking happens right in the loop header.", code: 'medals = {1: "gold", 2: "silver", 3: "bronze"}\nresults = [("ada", 1), ("bob", 2), ("eve", 3)]\nfor name, place in results:\n    print(f"{name} wins {medals[place]}")', note: "Loop-header unpacking makes code read like English. (That medals lookup? A dict — next session's star.)" },
+      ],
+      recap: [
+        "Tuples: immutable positional records; unpack in assignments and loop headers.",
+        "Sets: unique elements, O(1) 'in' — vs O(n) on lists. Same syntax, massive speed gap.",
+        "set(anything) deduplicates; len(set(x)) != len(x) detects duplicates in one line.",
+        "& | - give intersection/union/difference — nested comparison loops, deleted.",
+        "Choosing tuple vs list vs set is design: fixed record / ordered collection / unique membership.",
+      ],
+      quiz: [
+        { q: "The main reason to check membership in a set, not a list?", a: ["sets look cleaner", "set 'in' is O(1) hash lookup; list 'in' scans all elements O(n)", "lists can't use 'in'"], c: 1 },
+        { q: "t = (1, 2); t[0] = 5 →", a: ["t becomes (5, 2)", "TypeError — tuples are immutable", "silently ignored"], c: 1 },
+      ],
+    },
+    // ========== 7 ==========
+    {
+      title: "Dictionaries", icon: "🗝️", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Key → value, at O(1)</CH>
+          <Code code={'user = {"name": "Ada", "age": 36}\nuser["name"]              # \'Ada\' — lookup by key, instant\nuser["role"] = "eng"       # add / update\nuser["nope"]               # KeyError!  vs:\nuser.get("nope", "n/a")    # \'n/a\' — safe read with default\n"age" in user              # True — checks KEYS\ndel user["age"]'} note=".get(key, default) is the everyday read — no KeyError, ever. Like sets, dict lookups hash: O(1)." />
+          <CH>Iterating</CH>
+          <Code code={'for key in user:                  # keys by default\n    print(key)\nfor k, v in user.items():          # key AND value — the usual way\n    print(k, "→", v)\nuser.keys(), user.values()'} note=".items() + tuple unpacking = the standard dict loop." />
+          <CH>The counting pattern — memorize this shape</CH>
+          <Code code={'counts = {}\nfor ch in "banana":\n    counts[ch] = counts.get(ch, 0) + 1\nprint(counts)      # {\'b\': 1, \'a\': 3, \'n\': 2}\n\nfrom collections import Counter    # or let Python do it\nCounter("banana").most_common(1)    # [(\'a\', 3)]'} note="get(ch, 0) + 1 means 'start absent keys at zero'. Frequency counting solves a comic number of real problems — and Counter is its one-liner." />
+        </>
+      ),
+      problems: [
+        { title: "Word frequency", diff: "Classic", statement: "Given a sentence, build a dict of word → count. 'the cat and the hat' → {'the': 2, 'cat': 1, 'and': 1, 'hat': 1}.", hint: "split() from session 2 + the counting shape you just memorized.", code: 'def word_freq(text):\n    counts = {}\n    for word in text.lower().split():\n        counts[word] = counts.get(word, 0) + 1\n    return counts', note: "Two sessions composed: string pipeline feeds the counting pattern. Most real programs are exactly such compositions." },
+        { title: "Two Sum", diff: "Famous", src: "LeetCode #1 — the most-asked interview question in existence", statement: "Given nums and target, return the INDICES of the two numbers summing to target. nums=[2,7,11,15], target=9 → [0,1].", hint: "Walking the list, for each n ask: 'have I already SEEN target − n?' — and which structure answers seen-questions instantly, remembering where?", example: "two_sum([2, 7, 11, 15], 9)  →  [0, 1]", code: "def two_sum(nums, target):\n    seen = {}                      # value -> index\n    for i, n in enumerate(nums):\n        need = target - n\n        if need in seen:\n            return [seen[need], i]\n        seen[n] = i", note: "The dict remembers the past so you never re-scan it: O(n²) → O(n). This 'trade memory for speed' move is the single most valuable trick in this entire course.", complexity: "O(n) time · O(n) space" },
+        { title: "First non-repeating character", diff: "Famous", src: "LeetCode #387", statement: "Return the index of the first character that appears exactly once. 'leetcode' → 0 ('l'); 'aabb' → -1.", hint: "Two passes: pass 1 builds counts; pass 2 walks in order asking counts[ch] == 1.", code: "def first_unique(s):\n    counts = {}\n    for ch in s:\n        counts[ch] = counts.get(ch, 0) + 1\n    for i, ch in enumerate(s):\n        if counts[ch] == 1:\n            return i\n    return -1", note: "Count-then-scan: a two-pass pattern that stays O(n). The dict is the memory between the passes." },
+      ],
+      recap: [
+        "Dicts map keys → values at O(1); .get(key, default) reads without KeyError.",
+        "for k, v in d.items(): — the standard dict loop.",
+        "Counting shape: counts[x] = counts.get(x, 0) + 1 (Counter is its one-liner).",
+        "Two Sum's move — remember what you've seen in a dict — converts O(n²) scans to O(n).",
+        "Keys must be immutable/hashable: strings, numbers, tuples yes; lists no.",
+      ],
+      quiz: [
+        { q: "d['missing'] vs d.get('missing')?", a: ["identical", "[] raises KeyError; .get returns None (or your chosen default)", ".get is deprecated"], c: 1 },
+        { q: "Two Sum is O(n) because…", a: ["it sorts first", "each complement check is an O(1) dict lookup instead of a rescan of the array", "enumerate is fast"], c: 1 },
+      ],
+    },
+    // ========== 8 ==========
+    {
+      title: "Functions", icon: "🧩", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Define, return, default</CH>
+          <Code code={'def greet(name, punct="!"):        # punct has a default\n    return f"Hello, {name}{punct}"\n\ngreet("Ada")                # \'Hello, Ada!\'\ngreet("Ada", punct="?")     # keyword argument\n# no return statement? the function returns None'} note="return hands a value back AND exits immediately. print shows; return gives — beginners blur these for weeks. Don't." />
+          <CH>Scope — local unless stated</CH>
+          <Code code={"total = 0\ndef add(n):\n    result = n + 1     # local: exists only inside this call\n    return result\n# print(result)         # NameError — it's gone\n"} note="Variables born inside a function die with the call. Pass data IN via parameters, OUT via return — not by reaching for globals." />
+          <CH>*args, **kwargs & the mutable-default trap</CH>
+          <Code code={'def add_all(*nums):            # scoops extras into a tuple\n    return sum(nums)\nadd_all(1, 2, 3)                # 6\n\ndef bad(item, bucket=[]):       # ⚠️ THE trap\n    bucket.append(item)\n    return bucket\nbad(1); bad(2)                  # [1, 2] — SAME list both calls!\n\ndef good(item, bucket=None):    # the fix\n    if bucket is None:\n        bucket = []\n    bucket.append(item)\n    return bucket'} note="Defaults are evaluated ONCE, at def time. A mutable default is shared across all calls — a legendary bug AND a favorite interview question." />
+        </>
+      ),
+      problems: [
+        { title: "Prime checker", diff: "Classic", statement: "is_prime(n) → True if n has no divisors other than 1 and itself. Bonus: only test divisors up to √n.", hint: "Any divisor pair (a, b) has one member ≤ √n — so testing up to int(n**0.5) is enough.", code: "def is_prime(n):\n    if n < 2:\n        return False\n    for d in range(2, int(n ** 0.5) + 1):\n        if n % d == 0:\n            return False       # early exit — done the moment we know\n    return True", note: "Early return keeps logic flat. The √n bound turns O(n) into O(√n) — your first real optimization by math.", complexity: "O(√n)" },
+        { title: "Apply-twice (higher-order)", diff: "Challenge", statement: "Write apply_twice(func, x) that returns func(func(x)). Test with a lambda that adds 3: result on 10 → 16.", hint: "Functions are values — pass them like any argument. lambda x: x + 3 defines one inline.", code: "def apply_twice(func, x):\n    return func(func(x))\n\nprint(apply_twice(lambda x: x + 3, 10))   # 16\nprint(apply_twice(str.upper, \"hi\"))        # HI", note: "Functions-as-values is why sorted(key=len) works — you've been USING higher-order functions since session 5." },
+        { title: "Flexible average", diff: "Warmup", statement: "avg(1, 2, 3) → 2.0, avg(10, 20) → 15.0 — any number of arguments. Return 0 for no arguments (don't crash).", hint: "*args collects everything into a tuple; guard the empty case before dividing.", code: "def avg(*nums):\n    if not nums:            # truthiness: empty tuple is falsy\n        return 0\n    return sum(nums) / len(nums)", note: "*args + an empty-input guard: the shape of half the utility functions you'll ever write." },
+      ],
+      recap: [
+        "return gives a value back and exits; no return → None. print ≠ return.",
+        "Variables are local by default; communicate via parameters and return values.",
+        "Defaults evaluate ONCE at def — never default to []/{}: use None + create inside.",
+        "*args → tuple of extras; **kwargs → dict of extra keywords.",
+        "Functions are values: pass them (key=, callbacks), or make tiny ones with lambda.",
+      ],
+      quiz: [
+        { q: "def f(x): x + 1  — then f(3) is…", a: ["4", "None — no return statement", "3"], c: 1 },
+        { q: "def f(item, box=[]) is dangerous because…", a: ["lists are slow", "the default [] is created once and shared by every call that omits box", "box is reserved"], c: 1 },
+      ],
+    },
+    // ========== 9 ==========
+    {
+      title: "Comprehensions & power built-ins", icon: "✨", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>List comprehensions — transform + filter in one line</CH>
+          <Code code={"nums = [3, 1, 4, 1, 5, 9]\n[n * n for n in nums]                # transform\n[n for n in nums if n % 2 == 1]      # filter\n[n * n for n in nums if n > 3]       # both\n{n: n * n for n in nums}              # dict comprehension\n{n % 3 for n in nums}                 # set comprehension"} note="Read as English left-to-right: 'n squared, for each n in nums, if n > 3'. Taste rule: one for + one if max." />
+          <CH>zip, any, all</CH>
+          <Code code={'names, scores = ["ada", "bob"], [91, 78]\nfor name, s in zip(names, scores):    # pair-walk two lists\n    print(name, s)\ndict(zip(names, scores))               # {\'ada\': 91, \'bob\': 78}\n\nany(s > 90 for s in scores)            # True  — at least one?\nall(s > 50 for s in scores)            # True  — every one?'} note="any/all + a comprehension = whole validation loops in one readable line." />
+          <CH>sorted with key — the full power</CH>
+          <Code code={'words = ["banana", "fig", "apple"]\nsorted(words, key=len)                          # by length\nsorted(words, key=lambda w: w[-1])               # by last letter\npeople = [("ada", 36), ("bob", 25)]\nsorted(people, key=lambda p: p[1], reverse=True) # by age, desc'} note="key= answers 'sort by WHAT?' with any function. This one parameter is most of practical sorting." />
+        </>
+      ),
+      problems: [
+        { title: "One-line squares of evens", diff: "Warmup", statement: "From range(1, 11), build [4, 16, 36, 64, 100] in a single comprehension.", hint: "Filter evens with if, transform with **2 — both live in the same brackets.", code: "result = [n ** 2 for n in range(1, 11) if n % 2 == 0]\nprint(result)   # [4, 16, 36, 64, 100]", note: "The loop-append version is 4 lines; this is 1, and it reads better. That's the whole pitch." },
+        { title: "Flatten a 2D grid", diff: "Classic", statement: "[[1,2],[3,4],[5]] → [1,2,3,4,5] with a nested comprehension.", hint: "Two for clauses, OUTER loop first — same order you'd write the nested for-loops.", code: "grid = [[1, 2], [3, 4], [5]]\nflat = [x for row in grid for x in row]\nprint(flat)   # [1, 2, 3, 4, 5]", note: "'for row in grid for x in row' mirrors nested loops read top-to-bottom. Beyond two levels, use real loops." },
+        { title: "Invert a dictionary", diff: "Challenge", statement: "Flip {'a': 1, 'b': 2} into {1: 'a', 2: 'b'} in one dict comprehension (assume values are unique).", hint: ".items() hands you (k, v) pairs — emit them swapped.", code: "d = {\"a\": 1, \"b\": 2}\ninv = {v: k for k, v in d.items()}\nprint(inv)   # {1: 'a', 2: 'b'}", note: "Comprehension + items() unpacking: two sessions of ideas in nine characters of pattern." },
+      ],
+      recap: [
+        "[expr for x in seq if cond] — transform + filter; dict/set versions with {}.",
+        "Nested comprehension order = the order you'd write the nested loops.",
+        "zip pair-walks sequences; dict(zip(keys, values)) builds a mapping instantly.",
+        "any()/all() with a comprehension replace whole checking loops.",
+        "sorted(seq, key=lambda …) sorts by anything; reverse=True flips.",
+      ],
+      quiz: [
+        { q: "[x for x in range(5) if x % 2] gives…", a: ["[0, 2, 4]", "[1, 3] — nonzero remainders are truthy", "[2, 4]"], c: 1 },
+        { q: "all(x > 0 for x in []) is…", a: ["False", "True — 'all' of zero items is vacuously true (worth knowing!)", "an error"], c: 1 },
+      ],
+    },
+    // ========== 10 ==========
+    {
+      title: "Errors & files", icon: "🚨", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Read tracebacks bottom-up</CH>
+          <Code code={"# ZeroDivisionError: division by zero   <- WHAT went wrong (last line)\n# line 3, in calculate                  <- WHERE (lines above)\n\n# The usual suspects:\n# TypeError   wrong type ('a' + 1) | ValueError  bad value (int('hi'))\n# KeyError    missing dict key      | IndexError  index out of range\n# NameError   undefined variable"} note="Last line first, always. Naming the exception type usually names the bug." />
+          <CH>try / except — handle what you expect</CH>
+          <Code code={'while True:\n    try:\n        age = int(input("age: "))\n        break\n    except ValueError:              # catch the SPECIFIC error\n        print("digits only, try again")'} note="Catch specific exceptions — a bare 'except:' also swallows your typos and Ctrl-C, hiding real bugs. This retry-input loop is the classic use." />
+          <CH>Files — with + encoding, always</CH>
+          <Code code={'with open("notes.txt", "w", encoding="utf-8") as f:\n    f.write("line one\\nline two\\n")\n\nwith open("notes.txt", encoding="utf-8") as f:\n    for line in f:                    # streams line by line\n        print(line.strip())'} note="'with' guarantees the file closes even on errors. On Windows, ALWAYS pass encoding='utf-8' — the legacy default mangles é, emoji, ✓." />
+        </>
+      ),
+      problems: [
+        { title: "Bulletproof number input", diff: "Classic", statement: "Write read_int(prompt) that keeps asking until the user types a valid integer, then returns it.", hint: "The try/except retry loop above IS the answer — wrap it in a function with return instead of break.", code: 'def read_int(prompt):\n    while True:\n        try:\n            return int(input(prompt))\n        except ValueError:\n            print("that\'s not an integer — again:")', note: "return exits both the try AND the loop in one move. Every robust CLI you ever write contains this function." },
+        { title: "Word count of a file", diff: "Classic", statement: "Create sample.txt with a few lines, then count its total words — and handle the file not existing with a friendly message instead of a crash.", hint: "Session 2's split() + an accumulator, inside try/except FileNotFoundError.", code: 'def count_words(path):\n    try:\n        with open(path, encoding="utf-8") as f:\n            return sum(len(line.split()) for line in f)\n    except FileNotFoundError:\n        print(f"no such file: {path}")\n        return 0', note: "sum(… for line in f) streams the file — a 10 GB log would work without loading into memory. Generator expressions arrive properly in a later study; enjoy the preview." },
+        { title: "Safe divide", diff: "Warmup", statement: "divide(a, b) returns a/b, but returns None (with a printed warning) on division by zero.", hint: "One specific except. Which exception does 1/0 raise? (You met it in the traceback table.)", code: 'def divide(a, b):\n    try:\n        return a / b\n    except ZeroDivisionError:\n        print("warning: division by zero")\n        return None', note: "Returning None as a 'no answer' signal pairs with session 3's 'is None' check on the caller's side." },
+      ],
+      recap: [
+        "Tracebacks: read the LAST line first — it names the exception and the bug.",
+        "try/except catches expected failures; always catch SPECIFIC exception types.",
+        "The retry-input loop (try int() / except ValueError) is a universal building block.",
+        "with open(...) as f: guarantees closing; iterate f to stream line by line.",
+        "encoding='utf-8' on every open() — non-negotiable on Windows.",
+      ],
+      quiz: [
+        { q: "A bare 'except:' is harmful because…", a: ["it's slow", "it catches EVERYTHING — including typos (NameError) and Ctrl-C — masking real bugs", "syntax error"], c: 1 },
+        { q: "'with open(...)' beats plain open() because…", a: ["it's shorter", "the file is guaranteed closed even if the block raises", "it reads faster"], c: 1 },
+      ],
+    },
+    // ========== 11 ==========
+    {
+      title: "Classes — OOP essentials", icon: "🏛️", part: "PYTHON BASICS",
+      concepts: (
+        <>
+          <CH>Class = data + behavior, together</CH>
+          <Code code={'class BankAccount:\n    def __init__(self, owner, balance=0):   # runs at creation\n        self.owner = owner                    # attributes live on self\n        self.balance = balance\n\n    def deposit(self, amount):                # methods take self first\n        self.balance += amount\n\nacct = BankAccount("Ada", 100)   # __init__ runs\nacct.deposit(50)\nprint(acct.balance)               # 150'} note="self = 'this particular object'. Every method receives it automatically; every attribute hangs off it." />
+          <CH>__repr__ and __eq__ — plug into the language</CH>
+          <Code code={'class Point:\n    def __init__(self, x, y):\n        self.x, self.y = x, y\n    def __repr__(self):                    # what print() shows\n        return f"Point({self.x}, {self.y})"\n    def __eq__(self, other):               # what == means\n        return self.x == other.x and self.y == other.y\n\nprint(Point(1, 2))               # Point(1, 2)  not <object at 0x...>\nPoint(1, 2) == Point(1, 2)       # True'} note="Dunder (double-underscore) methods are how your types join Python's syntax. __repr__ and __eq__ are the two worth knowing by heart." />
+          <CH>Why classes matter HERE</CH>
+          <P style={{ fontSize: 13.5 }}>Next sessions build linked lists and trees — each is just a tiny class (<Kbd>Node</Kbd> with a value and pointers) plus algorithms that walk it. This session is the toolmaking for everything after session 12.</P>
+        </>
+      ),
+      problems: [
+        { title: "Rectangle with computed area", diff: "Classic", statement: "Class Rectangle(w, h) with methods area() and perimeter(), plus a __repr__ like Rectangle(3x4).", hint: "Store w and h in __init__; the methods just compute from self.", code: 'class Rectangle:\n    def __init__(self, w, h):\n        self.w, self.h = w, h\n    def area(self):\n        return self.w * self.h\n    def perimeter(self):\n        return 2 * (self.w + self.h)\n    def __repr__(self):\n        return f"Rectangle({self.w}x{self.h})"\n\nr = Rectangle(3, 4)\nprint(r, r.area(), r.perimeter())   # Rectangle(3x4) 12 14', note: "Data (w, h) and the behavior that belongs to it (area, perimeter) travel together — that's the whole point of a class." },
+        { title: "Guarded bank account", diff: "Challenge", statement: "Extend BankAccount: withdraw(amount) must refuse (print a message, change nothing) if amount exceeds the balance. Track every successful transaction in a self.history list.", hint: "A guard-clause if at the top of withdraw; append tuples like ('deposit', 50) to history.", code: 'class BankAccount:\n    def __init__(self, owner, balance=0):\n        self.owner, self.balance = owner, balance\n        self.history = []\n    def deposit(self, amount):\n        self.balance += amount\n        self.history.append(("deposit", amount))\n    def withdraw(self, amount):\n        if amount > self.balance:\n            print("insufficient funds")\n            return\n        self.balance -= amount\n        self.history.append(("withdraw", amount))', note: "Objects protecting their own invariants ('balance never negative') is OOP's actual job — not inheritance trees." },
+        { title: "Build a Node", diff: "Warmup", statement: "Write class Node with a val and a next (defaulting to None). Chain three by hand — a = Node(1); a.next = Node(2)… — then loop-print the chain. You've just built session 14's raw material.", hint: "The walking loop: curr = a, then while curr: print; curr = curr.next.", code: "class Node:\n    def __init__(self, val, next=None):\n        self.val = val\n        self.next = next\n\na = Node(1); a.next = Node(2); a.next.next = Node(3)\ncurr = a\nwhile curr:\n    print(curr.val, end=\" → \")\n    curr = curr.next\nprint(\"None\")     # 1 → 2 → 3 → None", note: "Congratulations: that's a linked list. Session 14 just teaches you to operate on what you built here." },
+      ],
+      recap: [
+        "class bundles data (attributes on self) with behavior (methods).",
+        "__init__ runs at creation; every method's first parameter is self.",
+        "__repr__ controls printing; __eq__ controls == — define both for data classes.",
+        "Guard clauses inside methods let objects protect their own rules.",
+        "A Node (val + next) is the atom of linked lists and trees — you've built one.",
+      ],
+      quiz: [
+        { q: "self refers to…", a: ["the class", "the specific object the method was called on", "the module"], c: 1 },
+        { q: "Without __repr__, print(obj) shows…", a: ["the attributes", "<ClassName object at 0x…> — memory noise", "an error"], c: 1 },
+      ],
+    },
+    // ========== 12 ==========
+    {
+      title: "Big-O — judging your own code", icon: "⏱️", part: "DATA STRUCTURES",
+      concepts: (
+        <>
+          <CH>The five speeds that matter</CH>
+          <Code title="cheat table" code={"O(1)        instant, size-independent      dict/set lookup, list append\nO(log n)    halves each step                binary search\nO(n)        one pass                        loops, sum(), 'in' on a list\nO(n log n)  sorting                         sorted(), .sort()\nO(n²)       nested loops over same data     compare-all-pairs"} note="Big-O = how work GROWS with input size, worst case. Constants ignored: O(2n) is O(n)." />
+          <CH>Read it off your code</CH>
+          <Code code={"for x in nums:            # O(n)\n    print(x)\n\nfor x in nums:            # O(n²) — n outer × n inner\n    for y in nums:\n        ...\n\nfor x in nums:            # O(n) or O(n²)?  DEPENDS:\n    if x in container:     #   set → O(1) inside → O(n) total\n        ...                #   list → O(n) inside → O(n²) total!"} note="The third example is the trap: an innocent 'in' hides a loop when container is a list. Now you can SEE why sessions 6–7 mattered." />
+          <CH>Python operation costs — the ones to memorize</CH>
+          <Code title="cost table" code={"list:  x[i] O(1) · append O(1) · x in list O(n) · insert(0)/pop(0) O(n)\nset:   add O(1) · x in set O(1)\ndict:  d[k] O(1) · k in d O(1) · get O(1)\nstr:   s += piece in a loop → O(n²) total; build list + join → O(n)"} note="insert(0)/pop(0) shift every element — a hidden O(n) that motivates deques next session." />
+        </>
+      ),
+      problems: [
+        { title: "Classify the snippets", diff: "Classic", statement: "For each: (a) sum(nums) — (b) nums.sort() — (c) nested loop finding all pairs — (d) 'x in my_set' — (e) binary search. Name each Big-O before revealing.", hint: "Match against the five-speed table: one pass? halving? nested?", code: "# (a) sum(nums)         O(n)      — one pass\n# (b) nums.sort()        O(n log n)\n# (c) all pairs          O(n²)     — n × n comparisons\n# (d) x in my_set        O(1)      — hash lookup\n# (e) binary search      O(log n)  — halves the search space", note: "Being able to label code at a glance is the entire skill. It becomes automatic within a week of doing it aloud." },
+        { title: "Speed up the duplicate finder", diff: "Famous", src: "your own session-5 code", statement: "Your session-5 nested-loop contains_duplicate is O(n²). Explain in one sentence WHY, then rewrite at O(n) and say where the speed comes from.", hint: "The inner loop is a search. What replaces searching with remembering?", code: "def contains_duplicate(nums):    # O(n)\n    seen = set()\n    for n in nums:                 # n iterations…\n        if n in seen:              # …each doing O(1) work\n            return True\n        seen.add(n)\n    return False", note: "The sentence: 'the inner loop re-searches earlier elements every time; a set remembers them for O(1) recall.' Saying WHY is what separates knowing from guessing." },
+        { title: "The string-building trap", diff: "Challenge", statement: "Why is  s = ''  then  s += word  in a loop O(n²)? Write the O(n) version.", hint: "Session 2: strings are immutable — so what must += do to s every single time?", code: "# BAD: each += copies the ENTIRE string so far -> 1+2+3+...+n copies = O(n²)\n# GOOD:\nparts = []\nfor word in words:\n    parts.append(word)        # O(1) each\nresult = \" \".join(parts)      # one O(n) pass", note: "Immutability (session 2) + append cost (this session) = a performance rule you can now DERIVE, not memorize." },
+      ],
+      recap: [
+        "Five speeds: O(1), O(log n), O(n), O(n log n), O(n²) — growth with input, worst case.",
+        "Nested loops over the same data = O(n²); one pass = O(n); halving = O(log n).",
+        "'in' costs O(n) on lists but O(1) on sets/dicts — the most consequential fact in this table.",
+        "insert(0)/pop(0) on lists are O(n); string += in a loop is O(n²).",
+        "The universal upgrade: replace an inner SEARCH with a remembered set/dict.",
+      ],
+      quiz: [
+        { q: "A loop over n items doing a list-membership check inside is…", a: ["O(n)", "O(n²) — the hidden 'in' scan multiplies", "O(log n)"], c: 1 },
+        { q: "O(n log n) is the signature of…", a: ["hashing", "comparison sorting (sorted, .sort)", "dict lookups"], c: 1 },
+      ],
+    },
+    // ========== 13 ==========
+    {
+      title: "Stacks & queues", icon: "🥞", part: "DATA STRUCTURES",
+      concepts: (
+        <>
+          <CH>Stack = LIFO (last in, first out)</CH>
+          <Code code={'stack = []                # a plain list IS a stack\nstack.append("a")          # push          O(1)\nstack.append("b")\nstack.pop()                 # pop → \'b\'     O(1)\nstack[-1]                   # peek → \'a\'    O(1)\nif stack: ...               # ALWAYS guard before pop'} note="Think plates: you take the TOP one. Undo history, the back button, matching brackets, function calls — all stacks." />
+          <CH>Queue = FIFO (first in, first out)</CH>
+          <Code code={"from collections import deque\nq = deque()\nq.append(\"job1\")        # enqueue at the back   O(1)\nq.append(\"job2\")\nq.popleft()              # dequeue the FRONT      O(1)  ← the point\n# a list's pop(0) does this in O(n) — session 12 says never"} note="Think checkout line: first arrived, first served. Print queues, task schedulers, and (session 15) breadth-first search." />
+          <CH>Choosing in one breath</CH>
+          <P style={{ fontSize: 13.5 }}>"Most recent thing matters" → <b style={{ color: C.white }}>stack</b>. "Arrival order matters" → <b style={{ color: C.white }}>queue</b>. That single sentence routes an enormous number of problems.</P>
+        </>
+      ),
+      problems: [
+        { title: "Valid Parentheses", diff: "Famous", src: "LeetCode #20 — the #1 stack question on Earth", statement: "Given a string of ()[]{}, return True if every bracket closes the right opener in the right order. '()[]' ✓ · '(]' ✗ · '([)]' ✗.", hint: "The most recently opened bracket must close FIRST — that word 'recent' is the stack signal. Push openers; on a closer, pop and compare.", code: 'def is_valid(s):\n    pairs = {")": "(", "]": "[", "}": "{"}\n    stack = []\n    for ch in s:\n        if ch in pairs:                          # a closer\n            if not stack or stack.pop() != pairs[ch]:\n                return False\n        else:\n            stack.append(ch)                     # an opener\n    return not stack                             # leftovers = unclosed', note: "Two classic bugs pre-handled: popping empty (']' alone) and leftover openers ('(('). A dict mapping closer→opener keeps it clean — three sessions composing.", complexity: "O(n)" },
+        { title: "Reverse with a stack", diff: "Warmup", statement: "Use push-all-then-pop-all to reverse a string. (Yes, [::-1] exists — the point is to FEEL LIFO reverse things.)", hint: "Everything pushed in order comes back out backwards. Collect the pops and join.", code: 'def reverse(s):\n    stack = list(s)          # push all\n    out = []\n    while stack:\n        out.append(stack.pop())   # pops come out reversed\n    return "".join(out)', note: "LIFO = built-in reversal. This intuition explains why depth-first search (session 15) explores the way it does." },
+        { title: "Recent counter", diff: "Famous", src: "LeetCode #933", statement: "Design ping(t): record a ping at time t and return how many pings happened in the window [t−3000, t]. Times arrive increasing.", hint: "Old pings expire from the FRONT while new ones join the BACK — that's a queue's exact anatomy.", code: "from collections import deque\n\nclass RecentCounter:\n    def __init__(self):\n        self.q = deque()\n    def ping(self, t):\n        self.q.append(t)\n        while self.q[0] < t - 3000:   # expire from the front\n            self.q.popleft()\n        return len(self.q)", note: "A sliding time window IS a queue. Rate limiters in real APIs are this class with more zeroes.", complexity: "O(1) amortized per ping" },
+      ],
+      recap: [
+        "Stack: list + append/pop/[-1], all O(1); guard empty pops with 'if stack'.",
+        "Queue: collections.deque + append/popleft — never list.pop(0) (O(n)).",
+        "'Most recent first' → stack; 'arrival order' → queue.",
+        "Matching/nesting/undo problems are stack problems, reflexively.",
+        "Sliding windows over time/streams are queues: join at back, expire from front.",
+      ],
+      quiz: [
+        { q: "For a queue, deque.popleft() beats list.pop(0) because…", a: ["shorter name", "popleft is O(1); pop(0) shifts every remaining element, O(n)", "lists lack pop(0)"], c: 1 },
+        { q: "'([)]' fails because…", a: ["4 chars is odd", "when ')' arrives, the top of the stack is '[' — the most recent opener mismatches", "brackets can't mix"], c: 1 },
+      ],
+    },
+    // ========== 14 ==========
+    {
+      title: "Linked lists", icon: "🔗", part: "DATA STRUCTURES",
+      concepts: (
+        <>
+          <CH>Node chains (built in session 11!)</CH>
+          <Code code={"class Node:\n    def __init__(self, val, next=None):\n        self.val = val\n        self.next = next\n# 1 → 2 → 3 → None : each node points to the next; None ends it\n\n# THE traversal (memorize):\ncurr = head\nwhile curr:\n    ...            # visit curr.val\n    curr = curr.next"} note="vs lists: O(1) insertion anywhere you hold a pointer, but O(n) to reach position i, and no slicing. Different trade-offs, not better/worse." />
+          <CH>The two power tools</CH>
+          <Code code={"# 1) dummy head — deletes 'empty list / first node' edge cases\ndummy = Node(0)\ntail = dummy\n# ...build by: tail.next = node; tail = tail.next\n# return dummy.next\n\n# 2) fast & slow pointers\nslow = fast = head\nwhile fast and fast.next:\n    slow = slow.next          # 1 step\n    fast = fast.next.next     # 2 steps\n# slow is now at the MIDDLE"} note="Dummy heads and fast/slow runners solve the majority of linked-list interview questions between them." />
+          <CH>The one deadly bug</CH>
+          <P style={{ fontSize: 13.5 }}>Overwriting <Kbd>curr.next</Kbd> before saving it orphans the rest of the chain — gone forever. Ritual: <Kbd>nxt = curr.next</Kbd> FIRST. And draw boxes-and-arrows on paper; linked lists are a visual sport.</P>
+        </>
+      ),
+      problems: [
+        { title: "Length & search", diff: "Warmup", statement: "Write list_length(head) and contains(head, target) using the traversal loop. Build a 1→2→3 chain to test.", hint: "Both are the memorized while-loop with a different body: count += 1, or an equality check with early return.", code: "def list_length(head):\n    count, curr = 0, head\n    while curr:\n        count += 1\n        curr = curr.next\n    return count\n\ndef contains(head, target):\n    curr = head\n    while curr:\n        if curr.val == target:\n            return True\n        curr = curr.next\n    return False", note: "Every linked-list algorithm starts from this walk. Own it before the famous one below." },
+        { title: "Reverse Linked List", diff: "Famous", src: "LeetCode #206 — asked at essentially every company", statement: "Reverse the chain in place: 1→2→3→None becomes 3→2→1→None. O(1) extra space.", hint: "Walk with prev (starts None) and curr. Each step: SAVE next, point curr backwards at prev, slide both forward.", code: "def reverse_list(head):\n    prev = None\n    curr = head\n    while curr:\n        nxt = curr.next        # 1. save before breaking\n        curr.next = prev       # 2. flip the arrow\n        prev = curr            # 3. advance prev\n        curr = nxt             # 4. advance curr\n    return prev                # new head", note: "Trace it on paper with 3 nodes ONCE — the four-line dance is then yours for life. Note step 1 preventing the deadly bug.", complexity: "O(n) time · O(1) space" },
+        { title: "Middle of the Linked List", diff: "Famous", src: "LeetCode #876", statement: "Return the middle node in ONE pass (second middle if even length). No counting-then-rewalking.", hint: "When the 2-speed runner reaches the end, where is the 1-speed runner?", code: "def middle_node(head):\n    slow = fast = head\n    while fast and fast.next:\n        slow = slow.next\n        fast = fast.next.next\n    return slow", note: "Fast/slow in its purest form. The identical loop with 'if slow is fast: return True' detects CYCLES (LeetCode #141) — one pattern, two famous problems.", complexity: "O(n) time · O(1) space" },
+      ],
+      recap: [
+        "Linked list = Node(val, next) chain ending in None; traverse with while curr / curr = curr.next.",
+        "Trade-offs vs lists: O(1) splice where you stand, O(n) access by position.",
+        "SAVE curr.next before overwriting it — the one deadly bug.",
+        "Reverse = prev/curr four-step dance; returns prev as the new head.",
+        "Fast & slow pointers find middles and detect cycles in one pass, O(1) space.",
+      ],
+      quiz: [
+        { q: "In reversal, nxt = curr.next comes first because…", a: ["style", "the next line overwrites curr.next — without saving it the rest of the list is unreachable", "Python evaluates backwards"], c: 1 },
+        { q: "When fast hits the end, slow sits at…", a: ["the start", "the middle — it moved half as many steps", "the end too"], c: 1 },
+      ],
+    },
+    // ========== 15 ==========
+    {
+      title: "Recursion & trees", icon: "🌳", part: "DATA STRUCTURES",
+      concepts: (
+        <>
+          <CH>Recursion = self-similar problems</CH>
+          <Code code={"def factorial(n):\n    if n <= 1:                 # BASE CASE — the exit\n        return 1\n    return n * factorial(n - 1)  # smaller version of itself\n# factorial(4) → 4 * 3 * 2 * 1 = 24"} note="Two mandatory parts: a base case that stops, and a recursive call on a SMALLER input. Missing base case = infinite calls = RecursionError." />
+          <CH>Trees — where recursion becomes natural</CH>
+          <Code code={"class TreeNode:\n    def __init__(self, val, left=None, right=None):\n        self.val, self.left, self.right = val, left, right\n\n# Every tree function, forever:\ndef solve(root):\n    if root is None:              # base case\n        return BASE_VALUE\n    L = solve(root.left)           # trust the recursion\n    R = solve(root.right)\n    return combine(L, R, root)     # combine"} note="A tree is recursive BY SHAPE: each child is itself a tree. That's why 3-line recursive functions handle structures of any size." />
+          <CH>DFS vs BFS — deep vs wide</CH>
+          <Code code={"# DFS: recursion dives to the bottom of one branch first (uses the call STACK)\n# BFS: a QUEUE visits level by level — session 13's deque, employed:\nfrom collections import deque\nq = deque([root])\nwhile q:\n    node = q.popleft()\n    # visit node; then:\n    if node.left:  q.append(node.left)\n    if node.right: q.append(node.right)"} note="Stack (implicit, via recursion) → depth-first. Queue → breadth-first / level-order / shortest path. Your session-13 structures just became traversal engines." />
+        </>
+      ),
+      problems: [
+        { title: "Sum of a list, recursively", diff: "Warmup", statement: "Write rsum(nums) with NO loop: the sum of a list = first element + sum of the rest.", hint: "Base case: empty list sums to 0. Recursive case: nums[0] + rsum(nums[1:]).", code: "def rsum(nums):\n    if not nums:                 # base: empty\n        return 0\n    return nums[0] + rsum(nums[1:])\n\nprint(rsum([1, 2, 3, 4]))   # 10", note: "A loop would be better in practice — this is a thinking drill: decompose into first + rest, trust the smaller call." },
+        { title: "Maximum Depth of Binary Tree", diff: "Famous", src: "LeetCode #104", statement: "Return the longest root-to-leaf node count. Build the small tree in the example to test.", example: "    3\n   / \\\n  9  20\n     / \\\n    15  7      → 3", hint: "Depth of nothing = 0. Depth of a tree = 1 + the deeper of its two subtrees. That's the template with combine = 1 + max.", code: "def max_depth(root):\n    if root is None:\n        return 0\n    return 1 + max(max_depth(root.left), max_depth(root.right))\n\n# build & test:\nt = TreeNode(3, TreeNode(9), TreeNode(20, TreeNode(15), TreeNode(7)))\nprint(max_depth(t))   # 3", note: "Swap the combine and the SAME skeleton counts nodes (1 + L + R), sums values (val + L + R), finds max… one template, a whole problem family.", complexity: "O(n)" },
+        { title: "Level Order Traversal", diff: "Famous", src: "LeetCode #102", statement: "Return values level by level: the example tree → [[3], [9, 20], [15, 7]].", hint: "BFS with the deque — plus the trick: freeze len(q) at each round's start; that's exactly this level's node count.", code: "from collections import deque\n\ndef level_order(root):\n    if root is None:\n        return []\n    result, q = [], deque([root])\n    while q:\n        level = []\n        for _ in range(len(q)):        # freeze this level's size\n            node = q.popleft()\n            level.append(node.val)\n            if node.left:  q.append(node.left)\n            if node.right: q.append(node.right)\n        result.append(level)\n    return result", note: "DFS (recursion) answers 'about the whole tree'; BFS (queue) answers 'level by level / nearest first'. Choosing between them is half of tree questions.", complexity: "O(n)" },
+      ],
+      recap: [
+        "Recursion = base case + smaller self-call; no base case → RecursionError.",
+        "Tree template: None → base value; recurse children; combine with root.",
+        "Trust the recursive call on subtrees — verify only base + combine.",
+        "DFS = recursion/stack (deep first); BFS = deque (level by level).",
+        "Level-order trick: snapshot len(queue) per round to bound each level.",
+      ],
+      quiz: [
+        { q: "Every recursive function needs a base case because…", a: ["PEP 8", "without a stop condition calls nest forever until the call stack overflows", "return requires it"], c: 1 },
+        { q: "'Visit level by level' calls for…", a: ["recursion", "BFS with a queue (deque)", "sorting"], c: 1 },
+      ],
+    },
+    // ========== 16 ==========
+    {
+      title: "Searching, sorting & the grand recap", icon: "🪜", part: "DATA STRUCTURES",
+      concepts: (
+        <>
+          <CH>Binary search — O(log n), template verbatim</CH>
+          <Code code={"def binary_search(nums, target):     # nums MUST be sorted\n    left, right = 0, len(nums) - 1\n    while left <= right:               # <= : window can be 1 element\n        mid = (left + right) // 2\n        if nums[mid] == target:\n            return mid\n        if nums[mid] < target:\n            left = mid + 1             # the ±1 prevents infinite loops\n        else:\n            right = mid - 1\n    return -1"} note="LeetCode #704, solved as a concept. A million items in ~20 steps. 'Sorted' + 'find' in any problem = this template, always." />
+          <CH>Sorting — one honest implementation, then the real tool</CH>
+          <Code code={"def bubble_sort(nums):                 # to UNDERSTAND O(n²)\n    n = len(nums)\n    for i in range(n):\n        for j in range(n - 1 - i):\n            if nums[j] > nums[j + 1]:\n                nums[j], nums[j + 1] = nums[j + 1], nums[j]\n\n# ...and what you actually use (Timsort, O(n log n)):\nsorted(nums) · nums.sort() · sorted(data, key=lambda x: ...)"} note="Implement bubble sort once to feel n² — then never again. Production sorting is sorted()+key, full stop." />
+          <CH>Sort-then-sweep — the combo pattern</CH>
+          <P style={{ fontSize: 13.5 }}>Paying O(n log n) to sort often UNLOCKS an O(n) sweep: duplicates become adjacent, overlaps become local, pairs meet via two pointers. When stuck on any array problem, ask out loud: <b style={{ color: C.white }}>"what if it were sorted?"</b></P>
+        </>
+      ),
+      problems: [
+        { title: "Binary Search, from memory", diff: "Famous", src: "LeetCode #704", statement: "Close the template above. Write binary_search blank-screen and test on [-1, 0, 3, 5, 9, 12] for targets 9 (→4) and 2 (→ -1). Off-by-ones are THE classic failure — get all three (<=, +1, -1) right.", hint: "The three checkpoints: while left <= right · left = mid + 1 · right = mid - 1.", code: "def binary_search(nums, target):\n    left, right = 0, len(nums) - 1\n    while left <= right:\n        mid = (left + right) // 2\n        if nums[mid] == target:\n            return mid\n        if nums[mid] < target:\n            left = mid + 1\n        else:\n            right = mid - 1\n    return -1\n\nnums = [-1, 0, 3, 5, 9, 12]\nprint(binary_search(nums, 9), binary_search(nums, 2))   # 4 -1", note: "Bonus fact worth repeating in interviews: when absent, 'left' rests exactly at the insertion point (that's LeetCode #35 for free).", complexity: "O(log n)" },
+        { title: "Merge Two Sorted Lists (array version)", diff: "Famous", src: "LeetCode #88's core", statement: "Merge two already-sorted lists into one sorted list in O(n + m) — no calling sorted() on the combination.", hint: "Two pointers, one per list; repeatedly take the smaller front; append the survivor's leftovers.", code: "def merge(a, b):\n    i = j = 0\n    out = []\n    while i < len(a) and j < len(b):\n        if a[i] <= b[j]:\n            out.append(a[i]); i += 1\n        else:\n            out.append(b[j]); j += 1\n    out.extend(a[i:])          # one of these is empty\n    out.extend(b[j:])\n    return out\n\nprint(merge([1, 4, 7], [2, 3, 9]))   # [1, 2, 3, 4, 7, 9]", note: "This merge is the beating heart of merge sort AND the linked-list version (LeetCode #21). Two pointers strike again.", complexity: "O(n + m)" },
+        { title: "Squares of a Sorted Array", diff: "Famous", src: "LeetCode #977 — the graduation exercise", statement: "Given a sorted array (may include negatives), return the squares in sorted order in O(n). [-4,-1,0,3,10] → [0,1,9,16,100]. Squaring breaks the order (16 > 9!) — sorting after costs O(n log n). Beat it.", hint: "The LARGEST square is at one of the two ENDS (biggest absolute value). Two pointers, fill the answer from the back.", code: "def sorted_squares(nums):\n    n = len(nums)\n    out = [0] * n\n    left, right = 0, n - 1\n    for i in range(n - 1, -1, -1):        # fill from the back\n        if abs(nums[left]) > abs(nums[right]):\n            out[i] = nums[left] ** 2\n            left += 1\n        else:\n            out[i] = nums[right] ** 2\n            right -= 1\n    return out\n\nprint(sorted_squares([-4, -1, 0, 3, 10]))   # [0, 1, 9, 16, 100]", note: "Everything converges: two pointers (S5/14), exploiting sortedness (this session), complexity judgment (S12), range stepping (S4). If this one clicked, the course worked.", complexity: "O(n)" },
+      ],
+      recap: [
+        "Binary search: sorted + while left <= right + mid ±1 — O(log n), template from memory.",
+        "Real sorting = sorted()/.sort() with key=; implement bubble once only to feel O(n²).",
+        "Sort-then-sweep: pay O(n log n) once to unlock O(n) passes (adjacent dups, meeting pointers).",
+        "Merging two sorted sequences with two pointers is O(n+m) — the soul of merge sort.",
+        "When stuck: 'what if it were sorted?' and 'can a dict/set replace this inner search?' solve a shocking fraction of problems.",
+      ],
+      quiz: [
+        { q: "left = mid + 1 (not left = mid) matters because…", a: ["readability", "with a 2-element window mid equals left; without +1 the window never shrinks — infinite loop", "negative indexes"], c: 1 },
+        { q: "Squares-of-sorted in O(n) works because…", a: ["squaring is fast", "the largest square must sit at one END of the array — two pointers harvest from the outside in", "Python caches squares"], c: 1 },
+      ],
+      final: true,
+    },
+  ];
+}
+
+// ---------- Grand map for the finale ----------
+const GRAND = [
+  ["S1-4", "variables · strings · branching · loops — the sentence-level grammar"],
+  ["S5-7", "list / tuple / set / dict — pick by job: order · record · membership · lookup"],
+  ["S8-9", "functions + comprehensions — name logic, transform collections in one line"],
+  ["S10-11", "errors, files, classes — robust programs and custom types (Node!)"],
+  ["S12", "Big-O — the lens: in on a list O(n), on a set O(1); nested loops O(n²)"],
+  ["S13", "stack = most-recent-first · queue(deque) = arrival order"],
+  ["S14", "linked lists — traversal walk · save-next-first · dummy head · fast/slow"],
+  ["S15", "recursion (base + smaller call) · tree template · DFS deep / BFS wide"],
+  ["S16", "binary search template · sorted()+key · sort-then-sweep · two-pointer merge"],
+];
+
+// ---------- Main ----------
+function Foundations() {
+  const [step, setStep] = useState(0);
+  const [visited, setVisited] = useState({ 0: true });
+  const [showToc, setShowToc] = useState(true);
+  const [grades, setGrades] = useState({});
+  const topRef = useRef(null);
+  const sessions = buildSessions();
+  const go = (i) => {
+    if (i < 0 || i >= sessions.length) return;
+    setStep(i); setVisited(v => ({ ...v, [i]: true })); setShowToc(false);
+    topRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+  const totalQ = sessions.reduce((a, s) => a + s.problems.length, 0);
+  const graded = Object.values(grades);
+  const s = sessions[step];
+  const basicsCount = sessions.filter(x => x.part === "PYTHON BASICS").length;
+
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, fontFamily: sans, color: C.text }}>
+      <style>{`
+        @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        @keyframes bob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+        @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+        button:focus-visible, input:focus-visible { outline: 2px solid ${C.mint}; outline-offset: 2px; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; } ::-webkit-scrollbar-thumb { background: ${C.line}; border-radius: 8px; }
+      `}</style>
+      <div ref={topRef} />
+
+      <header style={{ maxWidth: 800, margin: "0 auto", padding: "30px 20px 8px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ animation: "bob 3.5s ease-in-out infinite", fontSize: 34 }}>🌱</div>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ margin: 0, fontSize: 23, fontWeight: 800, color: C.white, letterSpacing: "-0.02em" }}>Python Foundations + Data Structures</h1>
+            <div style={{ fontFamily: mono, fontSize: 12, color: C.dim }}>16 sessions × ~75 min = 20 hrs · concepts → questions → recap · basics first, DS after</div>
+          </div>
+          <button onClick={() => setShowToc(!showToc)} style={{ fontFamily: mono, fontSize: 12, padding: "8px 14px", borderRadius: 8, cursor: "pointer", border: `1px solid ${C.line}`, background: showToc ? `${C.mint}18` : "transparent", color: showToc ? C.mint : C.dim }}>{showToc ? "hide plan" : "plan"}</button>
+        </div>
+        <div style={{ display: "flex", gap: 4, marginTop: 16 }}>
+          {sessions.map((m, i) => (
+            <button key={i} onClick={() => go(i)} title={m.title} aria-label={`Session ${i + 1}: ${m.title}`} style={{ flex: 1, height: 20, borderRadius: 4, cursor: "pointer", border: "none", background: i === step ? C.mint : visited[i] ? `${C.blue}55` : C.panel, boxShadow: i === step ? `0 0 0 1.5px ${C.mint}` : `inset 0 0 0 1px ${i < basicsCount ? C.line : C.purple + "55"}`, transition: "background .25s" }} />
+          ))}
+        </div>
+        <div style={{ fontFamily: mono, fontSize: 11, color: C.dim, marginTop: 5 }}>
+          session {step + 1}/{sessions.length} · {s.part} · hour {(step * 1.25).toFixed(2).replace(".00","")}–{((step + 1) * 1.25).toFixed(2).replace(".00","")} of 20
+          {graded.length > 0 && <span> · questions graded {graded.length}/{totalQ} ({graded.filter(g => g === "solo").length} solo ✅)</span>}
+        </div>
+      </header>
+
+      {showToc && (
+        <nav style={{ maxWidth: 800, margin: "0 auto", padding: "8px 20px" }}>
+          {["PYTHON BASICS", "DATA STRUCTURES"].map(part => (
+            <div key={part}>
+              <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: "0.16em", color: part === "PYTHON BASICS" ? C.mint : C.purple, margin: "12px 2px 6px" }}>{part}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 8 }}>
+                {sessions.map((m, i) => m.part === part && (
+                  <button key={i} onClick={() => go(i)} style={{ textAlign: "left", background: i === step ? `${C.mint}14` : C.panel, border: `1px solid ${i === step ? C.mint + "88" : C.line}`, borderRadius: 10, padding: "9px 12px", cursor: "pointer" }}>
+                    <div style={{ fontSize: 13.5, color: C.white, fontWeight: 600, fontFamily: sans }}>{m.icon} S{i + 1} · {m.title}</div>
+                    <div style={{ fontFamily: mono, fontSize: 10.5, color: visited[i] ? C.green : C.dim, marginTop: 3 }}>{visited[i] ? "✓ " : ""}~75 min · {m.problems.length} questions</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </nav>
+      )}
+
+      <main style={{ maxWidth: 800, margin: "0 auto", padding: "14px 20px 30px" }}>
+        <div key={step} style={{ background: C.panel, border: `1px solid ${C.line}`, borderRadius: 16, padding: "24px 22px", animation: "rise .35s both" }}>
+          <div style={{ fontFamily: mono, fontSize: 11, letterSpacing: "0.14em", color: s.part === "PYTHON BASICS" ? C.mint : C.purple, marginBottom: 6 }}>{s.icon} SESSION {step + 1} · {s.part} · ~75 MIN</div>
+          <h2 style={{ fontFamily: sans, fontWeight: 700, fontSize: 25, color: C.white, margin: "0 0 2px", letterSpacing: "-0.02em" }}>{s.title}</h2>
+
+          {/* concepts */}
+          {s.concepts}
+
+          {/* questions */}
+          <h3 style={{ fontFamily: sans, fontWeight: 700, fontSize: 17, color: C.orange, margin: "26px 0 4px" }}>❓ Questions — attempt in the REPL before any reveal</h3>
+          {s.problems.map((p, pi) => (
+            <Question key={pi} p={p}
+              grade={grades[`${step}-${pi}`]}
+              setGrade={(g) => setGrades(prev => ({ ...prev, [`${step}-${pi}`]: g }))} />
+          ))}
+
+          {/* recap */}
+          <Recap items={s.recap} />
+          <Quiz questions={s.quiz} />
+
+          {s.final && (
+            <>
+              <h3 style={{ fontFamily: sans, fontWeight: 700, fontSize: 17, color: C.mint, margin: "26px 0 6px" }}>🗺️ The whole course on one screen</h3>
+              <div style={{ background: C.panel2, border: `1px solid ${C.line}`, borderRadius: 12, padding: "8px 14px" }}>
+                {GRAND.map(([ses, d], i) => (
+                  <div key={i} style={{ display: "flex", gap: 12, padding: "7px 0", borderBottom: i < GRAND.length - 1 ? `1px solid ${C.line}55` : "none", alignItems: "baseline", flexWrap: "wrap" }}>
+                    <code style={{ fontFamily: mono, fontSize: 12, fontWeight: 700, color: C.mint, minWidth: 52 }}>{ses}</code>
+                    <span style={{ fontSize: 13, color: C.text, lineHeight: 1.55, flex: 1 }}>{d}</span>
+                  </div>
+                ))}
+              </div>
+              <P style={{ fontSize: 13.5 }}>Finishing move: re-attempt every question you graded 🟡/🔴 from a blank REPL — solving twice beats reading five new ones. After that, you're ready for the <b style={{ color: C.white }}>80/20 interview sprint</b> (deeper patterns: sliding window, monotonic stacks, DP) or the <b style={{ color: C.white }}>Data Science track</b> — everything there builds directly on sessions 5–9.</P>
+            </>
+          )}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16 }}>
+          <button onClick={() => go(step - 1)} disabled={step === 0} style={{ fontFamily: mono, fontSize: 13, padding: "10px 18px", borderRadius: 8, border: `1px solid ${C.line}`, background: "transparent", color: step === 0 ? C.line : C.dim, cursor: step === 0 ? "default" : "pointer" }}>← back</button>
+          {step < sessions.length - 1 ? (
+            <button onClick={() => go(step + 1)} style={{ fontFamily: mono, fontSize: 13, fontWeight: 700, padding: "10px 22px", borderRadius: 8, border: "none", background: C.mint, color: "#06201A", cursor: "pointer" }}>next session →</button>
+          ) : (
+            <span style={{ fontFamily: mono, fontSize: 13, color: C.green, alignSelf: "center" }}>🌱 → 🌳 complete</span>
+          )}
+        </div>
+      </main>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Foundations />);
+</script>
+</body>
+</html>
